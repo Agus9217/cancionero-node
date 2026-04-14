@@ -41,7 +41,7 @@ En lo posible busca en la web la letra original y oficial de esa canción. Si no
     3. Si estás 100% seguro de la canción y su letra, devuelve un JSON así:
        { "type": "exact", "title": "Nombre Real", "author": "Autor Real", "lyrics": "Letra completa..." }
     4. Si hay ambigüedad (ej. existen varias canciones llamadas igual) o solo recuerdas el coro, devuelve hasta 5 opciones:
-       { "type": "options", "list": [ {"title": "...", "author": "..."} ] }
+       { "type": "options", "list": [ {"title": "...", "author": "...", "lyrics": "Letra completa..."} ] }
     5. Si no conoces la canción en absoluto, devuelve estrictamente esto:
        { "type": "not_found" }
        
