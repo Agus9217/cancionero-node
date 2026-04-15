@@ -1,5 +1,3 @@
-// /src/services/songService.ts (o donde tengas este archivo)
-
 import { SongModel } from '../models/Song';
 import { ai } from '../config/gemini';
 
@@ -53,18 +51,26 @@ export const buscarletras = async (
       contents: prompt,
       config: {
         temperature: 0,
-        responseMimeType: 'application/json',
         tools: [{ googleSearch: {} }],
       },
     });
 
     let responseText = response.text || '';
+
+    // 1. Quitamos el markdown
     responseText = responseText
       .replace(/```json/g, '')
       .replace(/```/g, '')
       .trim();
-    const parsedData = JSON.parse(responseText);
 
+    // 2. EL FILTRO QUE TE FALTABA: Extrae solo el bloque JSON, ignorando el texto extra
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      responseText = jsonMatch[0];
+    }
+
+    // 3. Ahora el parse es 100% seguro
+    const parsedData = JSON.parse(responseText);
     if (parsedData.type === 'not_found') {
       return {
         type: 'not_found',
