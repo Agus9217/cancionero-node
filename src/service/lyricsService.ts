@@ -31,29 +31,29 @@ export const buscarletras = async (
 
   // 2. Si no está en DB, vamos a Gemini
   const prompt = `
-    Eres un experto catalogador de música cristiana. Tu única función es devolver letras EXACTAS y REALES.
+    Eres un experto catalogador de música cristiana. Tu única función es buscar y devolver letras EXACTAS y REALES, EXCLUSIVAMENTE del ámbito cristiano.
     El usuario busca la canción con el título: "${title}" y autor: "${author}".
-    En lo posible busca en la web la letra original y oficial de esa canción. Si no la encuentras, no inventes ni compongas nada. Solo devuelve lo que sabes con certeza.
     
     REGLAS ESTRICTAS:
-    1. NO INVENTES NI COMPONGAS LETRAS. Si no conoces la letra original y oficial de memoria, NO trates de adivinarla.
-    2. Usa saltos de línea reales (\\n) para separar estrofas y coros.
-    3. Si estás 100% seguro de la canción y su letra, devuelve un JSON así:
+    1. FILTRO DE GÉNERO (CRÍTICO): Antes de buscar, analiza si la canción o el autor pertenecen a la música cristiana, góspel, alabanza o adoración. Si la canción es SECULAR (pop comercial, rock, reggaeton no cristiano, etc.), DEBES rechazarla automáticamente, incluso si te sabes la letra de memoria. En ese caso, ve al punto 6.
+    2. NO INVENTES NI COMPONGAS LETRAS. Solo devuelve lo que sepas con certeza que es oficial.
+    3. Usa saltos de línea reales (\\n) para separar estrofas y coros.
+    4. Si superó el filtro cristiano y estás 100% seguro de la letra, devuelve un JSON así:
        { "type": "exact", "title": "Nombre Real", "author": "Autor Real", "lyrics": "Letra completa..." }
-    4. Si hay ambigüedad o solo recuerdas el coro, devuelve hasta 5 opciones:
+    5. Si superó el filtro cristiano pero hay varias versiones o autores, devuelve hasta 5 opciones:
        { "type": "options", "list": [ {"title": "...", "author": "..."} ] }
-    5. Si no conoces la canción en absoluto, devuelve estrictamente esto:
+    6. Si la canción es SECULAR, o si simplemente no la conoces en absoluto, devuelve estrictamente esto:
        { "type": "not_found" }
        
     Solo devuelve JSON válido, sin texto adicional ni formateo markdown.  
-  `;
-
+`;
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash-lite',
       contents: prompt,
       config: {
         temperature: 0,
+        responseMimeType: 'application/json',
         tools: [{ googleSearch: {} }],
       },
     });
