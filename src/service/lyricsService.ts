@@ -51,7 +51,6 @@ export const buscarletras = async (
       contents: prompt,
       config: {
         temperature: 0,
-        tools: [{ googleSearch: {} }],
       },
     });
 
