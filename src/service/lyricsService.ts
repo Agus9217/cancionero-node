@@ -45,74 +45,105 @@ export const buscarletras = async (
        
     Solo devuelve JSON válido, sin texto adicional ni formateo markdown.  
 `;
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        temperature: 0,
-        tools: [{ googleSearch: {} }],
-      },
-    });
+  // Lista de modelos en orden de preferencia (Plan A, Plan B, Plan C)
+  const modelosDeRespaldo = [
+    'gemini-2.5-flash-lite',
+    'gemini-2.5-flash',
+  ];
 
-    let responseText = response.text || '';
+  // Recorremos la lista. Si uno falla por límite, probamos el siguiente.
+  for (const modeloActual of modelosDeRespaldo) {
+    try {
+      console.log(
+        `Intentando buscar con: ${modeloActual}...`,
+      );
 
-    // 1. Quitamos el markdown
-    responseText = responseText
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .trim();
-
-    // 2. EL FILTRO QUE TE FALTABA: Extrae solo el bloque JSON, ignorando el texto extra
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      responseText = jsonMatch[0];
-    }
-
-    // 3. Ahora el parse es 100% seguro
-    const parsedData = JSON.parse(responseText);
-    if (parsedData.type === 'not_found') {
-      return {
-        type: 'not_found',
-        source: 'gemini',
-        data: null,
-      };
-    }
-
-    // --- EL CAMBIO PRINCIPAL ESTÁ AQUÍ ---
-    // 3. Si Gemini encontró la letra exacta, la devolvemos a la App PERO NO LA GUARDAMOS en Mongo
-    if (parsedData.type === 'exact') {
-      return {
-        type: 'exact',
-        source: 'gemini',
-        data: {
-          title: parsedData.title,
-          author: parsedData.author,
-          lyrics: parsedData.lyrics,
-          tags: parsedData.tags || [],
+      const response = await ai.models.generateContent({
+        model: modeloActual,
+        contents: prompt,
+        config: {
+          temperature: 0,
         },
-      };
-    }
+      });
 
-    // 4. Arreglo para que React Native no se queje de las "keys"
-    if (parsedData.type === 'options') {
-      return {
-        type: 'options',
-        source: 'gemini',
-        // Le inyectamos un _id falso temporal para que React Native pueda armar la lista
-        data: parsedData.list.map(
-          (item: any, index: number) => ({
-            _id: `temp-${index}`,
-            title: item.title,
-            author: item.author,
-          }),
-        ),
-      };
+      let responseText = response.text || '';
+
+      // 1. Quitamos el markdown
+      responseText = responseText
+        .replace(/```json/g, '')
+        .replace(/```/g, '')
+        .trim();
+
+      // 2. Filtro Regex de llaves
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        responseText = jsonMatch[0];
+      }
+
+      // 3. Parseo seguro
+      const parsedData = JSON.parse(responseText);
+
+      if (parsedData.type === 'not_found') {
+        return {
+          type: 'not_found',
+          source: 'gemini',
+          data: null,
+        };
+      }
+
+      if (parsedData.type === 'exact') {
+        return {
+          type: 'exact',
+          source: 'gemini',
+          data: {
+            title: parsedData.title,
+            author: parsedData.author,
+            lyrics: parsedData.lyrics,
+            tags: parsedData.tags || [],
+          },
+        };
+      }
+
+      if (parsedData.type === 'options') {
+        return {
+          type: 'options',
+          source: 'gemini',
+          data: parsedData.list.map(
+            (item: any, index: number) => ({
+              _id: `temp-${index}`,
+              title: item.title,
+              author: item.author,
+            }),
+          ),
+        };
+      }
+    } catch (error: any) {
+      // Verificamos si el error fue por exceso de peticiones (Rate Limit / Quota)
+      const isRateLimit =
+        error.status === 429 ||
+        error.message?.includes('429') ||
+        error.message?.includes('RESOURCE_EXHAUSTED');
+
+      if (isRateLimit) {
+        console.warn(
+          `⚠️ Límite alcanzado en ${modeloActual}. Cambiando al siguiente...`,
+        );
+        continue; // Esto le dice al código: "Ignora el error y pasa al siguiente modelo del For"
+      } else {
+        // Si el error fue por otra cosa (ej. sintaxis, se cayó Google), cortamos todo.
+        console.error(
+          `Error crítico procesando con ${modeloActual}:`,
+          error,
+        );
+        throw new Error(
+          'No se pudo obtener la letra en este momento.',
+        );
+      }
     }
-  } catch (error) {
-    console.error('Error procesando con IA:', error);
-    throw new Error(
-      'No se pudo obtener la letra en este momento.',
-    );
   }
+
+  // Si el loop intentó con los 3 modelos y los 3 dieron error 429, lanzamos este error final:
+  throw new Error(
+    'Nuestros servidores están saturados en este momento. Por favor, intenta en un minuto.',
+  );
 };
